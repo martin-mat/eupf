@@ -2,6 +2,7 @@
 
 <div align="center">
 
+[![CNTi cert](https://github.com/edgecomllc/eupf/actions/workflows/cnti.yml/badge.svg)](https://github.com/edgecomllc/eupf/actions/workflows/cnti.yml)
 [![GitHub Release][release-img]][release]
 [![Build][build-img]][build]
 [![Test][test-img]][test]
