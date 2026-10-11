@@ -16,3 +16,4 @@ deployments:
     - name: eupf
       helm_directory: ../../.deploy/helm/eupf
       namespace: eupf
+# fork test: a change to the configuration triggers essential-pr
