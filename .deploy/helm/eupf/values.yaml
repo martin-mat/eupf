@@ -229,7 +229,8 @@ podSecurityContext:
 #   capabilities:
 #     add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON]
 securityContext:
-  privileged: true
+  capabilities:
+    add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON]
 
 extraContainerPorts:
   - name: metrics
