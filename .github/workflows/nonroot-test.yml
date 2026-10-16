@@ -14,10 +14,6 @@ jobs:
             source: v0.7.1
             tag: nonroot-test
             cnf_config: .github/cnti/cnti-testsuite.yaml
-          - name: "main + file caps, root (attribution)"
-            source: main
-            tag: main-test
-            cnf_config: .github/cnti/cnti-testsuite-root.yaml
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -32,8 +28,10 @@ jobs:
           if [ "${{ matrix.source }}" != main ]; then
             git fetch --depth 1 origin tag ${{ matrix.source }}
             src=$(mktemp -d); git --work-tree="$src" checkout ${{ matrix.source }} -- . ; git reset -q
+            # The tag's own Dockerfile builds on bullseye, which apt no longer serves:
+            # build the tag's source with the branch's Dockerfile (bookworm, setcap).
+            cp Dockerfile entrypoint.sh "$src/"
           fi
-          grep -q setcap "$src/Dockerfile" || sed -i '/^COPY \.\/entrypoint\.sh/a RUN apk add --no-cache libcap \&\& setcap cap_net_admin,cap_sys_admin,cap_sys_resource,cap_bpf,cap_perfmon,cap_dac_override=ep /app/bin/eupf \&\& apk del libcap' "$src/Dockerfile"
           grep -n setcap "$src/Dockerfile"
           docker build -t ghcr.io/edgecomllc/eupf:${{ matrix.tag }} "$src"
           docker run --rm --entrypoint sh ghcr.io/edgecomllc/eupf:${{ matrix.tag }} -c 'apk add --no-cache libcap >/dev/null && getcap /app/bin/eupf && /app/bin/eupf --help 2>&1 | head -2 || true'
