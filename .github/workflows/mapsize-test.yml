@@ -10,8 +10,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: "main defaults (65535 sessions), limit 1Gi: measure"
-            cnf_config: .github/cnti/cnti-measure.yaml
+          - name: "main defaults, limit 192Mi"
+            cnf_config: .github/cnti/cnti-limit-192Mi.yaml
+          - name: "main defaults, limit 256Mi"
+            cnf_config: .github/cnti/cnti-limit-256Mi.yaml
+          - name: "main defaults, limit 384Mi"
+            cnf_config: .github/cnti/cnti-limit-384Mi.yaml
+          - name: "main defaults, limit 512Mi"
+            cnf_config: .github/cnti/cnti-limit-512Mi.yaml
           - name: "main, UPF_MAX_SESSIONS=1024, limit 128Mi"
             cnf_config: .github/cnti/cnti-sessions.yaml
     name: ${{ matrix.name }}
@@ -30,12 +36,13 @@ jobs:
           tests: cert
           log_level: info
           install_timeout: "300"
-      - name: Memory and map sizes
+      - name: Memory as the kubelet accounts it
         if: always()
         run: |
           set +e
           kubectl get pods -n eupf -o wide
           pod=$(kubectl get pod -n eupf -l app.kubernetes.io/name=eupf -o jsonpath='{.items[0].metadata.name}')
-          kubectl exec -n eupf "$pod" -- sh -c 'echo "memory.current=$(cat /sys/fs/cgroup/memory.current)"; echo "memory.peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)"; echo "memory.max=$(cat /sys/fs/cgroup/memory.max)"; grep -E "^(VmRSS|VmHWM)" /proc/1/status'
-          kubectl logs -n eupf "$pod" --tail=60 | grep -E "Startup config|Apply eUPF|map|FTL|ERR" | cut -c1-400
-          kubectl get events -n eupf --sort-by=.lastTimestamp | tail -8
+          node=$(kubectl get pod -n eupf "$pod" -o jsonpath='{.spec.nodeName}')
+          kubectl get --raw "/api/v1/nodes/$node/proxy/stats/summary" | jq -c --arg p "$pod" '.pods[]|select(.podRef.name==$p)|{pod: .podRef.name, pod_memory: .memory, containers: [.containers[]|{name, usageBytes: .memory.usageBytes, workingSetBytes: .memory.workingSetBytes, rssBytes: .memory.rssBytes}]}'
+          kubectl get pod -n eupf "$pod" -o jsonpath='{.status.containerStatuses[0].restartCount} restarts, last state: {.status.containerStatuses[0].lastState}'; echo
+          kubectl logs -n eupf "$pod" --tail=60 | grep -E "Apply eUPF|FTL|ERR" | cut -c1-300
