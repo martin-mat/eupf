@@ -1,0 +1,56 @@
+name: CNTi non-root test
+on:
+  push:
+    branches: [nonroot-test-2]
+permissions:
+  contents: read
+jobs:
+  cert:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "0.7.1 + file caps, non-root"
+            source: v0.7.1
+            tag: nonroot-test
+            cnf_config: .github/cnti/cnti-testsuite.yaml
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: The runner's BPF filesystem (bound into the kind nodes)
+        run: mount | grep -E ' /sys/fs/bpf ' || { echo '::error::no bpffs on the runner'; exit 1; }
+      - name: Build the image from ${{ matrix.source }} with file capabilities
+        run: |
+          set -euo pipefail
+          src=$PWD
+          if [ "${{ matrix.source }}" != main ]; then
+            git fetch --depth 1 origin tag ${{ matrix.source }}
+            src=$(mktemp -d); git --work-tree="$src" checkout ${{ matrix.source }} -- . ; git reset -q
+            # The tag's own Dockerfile builds on bullseye, which apt no longer serves:
+            # build the tag's source with the branch's Dockerfile (bookworm, setcap).
+            cp Dockerfile entrypoint.sh "$src/"
+          fi
+          grep -n setcap "$src/Dockerfile"
+          docker build -t ghcr.io/edgecomllc/eupf:${{ matrix.tag }} "$src"
+          docker run --rm --entrypoint sh ghcr.io/edgecomllc/eupf:${{ matrix.tag }} -c 'apk add --no-cache libcap >/dev/null && getcap /app/bin/eupf && /app/bin/eupf --help 2>&1 | head -2 || true'
+      - uses: lfn-cnti/testsuite-action@70536fda55fcb11f4f7463175fe9d57c86b85574 # v1.2.0
+        with:
+          version: v2.3.0
+          cnf_config: ${{ matrix.cnf_config }}
+          kind_config: .github/cnti/kind.yaml
+          kind_load_images: ghcr.io/edgecomllc/eupf:${{ matrix.tag }}
+          tests: cert
+          log_level: info
+          install_timeout: "300"
+      - name: Diagnostics
+        if: always()
+        run: |
+          set +e
+          kubectl get pods -n eupf -o wide
+          pod=$(kubectl get pod -n eupf -l app.kubernetes.io/name=eupf -o jsonpath='{.items[0].metadata.name}')
+          kubectl get pod -n eupf "$pod" -o jsonpath='{.spec.containers[0].securityContext}'; echo
+          kubectl exec -n eupf "$pod" -- sh -c 'id; grep -E "^(Uid|Gid|Cap(Prm|Eff|Bnd)|NoNewPrivs)" /proc/1/status; ls -ld /sys/fs/bpf /sys/fs/bpf/upf_pipeline; ls -l /sys/fs/bpf/upf_pipeline | head'
+          kubectl logs -n eupf "$pod" --all-containers --tail=40
+          kubectl get events -n eupf --sort-by=.lastTimestamp | tail -20
