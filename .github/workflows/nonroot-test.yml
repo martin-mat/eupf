@@ -24,6 +24,7 @@ jobs:
           kind_load_images: ghcr.io/edgecomllc/eupf:nonroot-test
           tests: cert
           log_level: info
+          install_timeout: "300"
       - name: Diagnostics
         if: always()
         run: |
