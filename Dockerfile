@@ -28,5 +28,15 @@ COPY --from=builder /app/cmd/docs/swagger.* /app/
 COPY --from=builder /app/cmd/ebpf/zeroentrypoint_bpf.o /app/
 COPY ./entrypoint.sh /app/bin/entrypoint.sh
 
+# File capabilities, so eupf gets what it needs without running as root:
+# BPF and PERFMON load the eBPF programs, NET_ADMIN attaches XDP and sets
+# routes, SYS_RESOURCE raises RLIMIT_MEMLOCK, SYS_ADMIN covers kernels
+# before CAP_BPF, and DAC_OVERRIDE creates the pin directory under
+# /sys/fs/bpf, which is owned by root. The container's bounding set still
+# decides which of them the process can have.
+RUN apk add --no-cache libcap \
+    && setcap cap_net_admin,cap_sys_admin,cap_sys_resource,cap_bpf,cap_perfmon,cap_dac_override=ep /app/bin/eupf \
+    && apk del libcap
+
 # CMD is overridden if arguments are passed.
 ENTRYPOINT [ "sh", "/app/bin/entrypoint.sh" ]
