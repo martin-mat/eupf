@@ -1,0 +1,32 @@
+name: Chart fix test
+on:
+  push:
+    branches: [chart-max-sessions-test]
+permissions:
+  contents: read
+jobs:
+  cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image from main
+        run: docker build -t ghcr.io/edgecomllc/eupf:main-test .
+      - uses: lfn-cnti/testsuite-action@70536fda55fcb11f4f7463175fe9d57c86b85574 # v1.2.0
+        with:
+          version: v2.3.0
+          cnf_config: .github/cnti/cnti-testsuite.yaml
+          kind_config: .github/cnti/kind.yaml
+          kind_load_images: ghcr.io/edgecomllc/eupf:main-test
+          tests: cert
+          log_level: info
+          install_timeout: "300"
+      - name: Memory as the kubelet accounts it
+        if: always()
+        run: |
+          set +e
+          pod=$(kubectl get pod -n eupf -l app.kubernetes.io/name=eupf -o jsonpath='{.items[0].metadata.name}')
+          node=$(kubectl get pod -n eupf "$pod" -o jsonpath='{.spec.nodeName}')
+          kubectl get --raw "/api/v1/nodes/$node/proxy/stats/summary" | jq -c --arg p "$pod" '.pods[]|select(.podRef.name==$p)|{pod: .podRef.name, workingSetBytes: .memory.workingSetBytes, rssBytes: .memory.rssBytes}'
+          kubectl get pod -n eupf "$pod" -o jsonpath='{.spec.containers[0].env[?(@.name=="UPF_MAX_SESSIONS")]}{" limits: "}{.spec.containers[0].resources.limits}'; echo
+          kubectl logs -n eupf "$pod" --tail=40 | grep -E "Apply eUPF|FTL|ERR" | cut -c1-300

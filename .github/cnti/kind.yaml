@@ -1,0 +1,21 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+# Every node: the unsafe sysctl eUPF needs, and the host's BPF filesystem.
+# eUPF pins its maps under /sys/fs/bpf, which systemd hosts mount; kind nodes
+# don't, so it is bound in from the runner.
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches: &allow-ip-forward
+      - |
+        kind: KubeletConfiguration
+        allowedUnsafeSysctls:
+          - "net.ipv4.ip_forward"
+    extraMounts: &bpffs
+      - hostPath: /sys/fs/bpf
+        containerPath: /sys/fs/bpf
+  - role: worker
+    kubeadmConfigPatches: *allow-ip-forward
+    extraMounts: *bpffs
+  - role: worker
+    kubeadmConfigPatches: *allow-ip-forward
+    extraMounts: *bpffs
