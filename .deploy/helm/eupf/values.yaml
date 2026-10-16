@@ -243,8 +243,11 @@ podSecurityContext:
 #   capabilities:
 #     add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON, DAC_OVERRIDE]
 securityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
   capabilities:
-    add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON]
+    add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON, DAC_OVERRIDE]
 
 extraContainerPorts:
   - name: metrics
