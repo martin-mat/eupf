@@ -1,0 +1,41 @@
+name: Map size vs memory limit test
+on:
+  push:
+    branches: [mapsize-test]
+permissions:
+  contents: read
+jobs:
+  cert:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: "main defaults (65535 sessions), limit 1Gi: measure"
+            cnf_config: .github/cnti/cnti-measure.yaml
+          - name: "main, UPF_MAX_SESSIONS=1024, limit 128Mi"
+            cnf_config: .github/cnti/cnti-sessions.yaml
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image from main
+        run: docker build -t ghcr.io/edgecomllc/eupf:main-test .
+      - uses: lfn-cnti/testsuite-action@70536fda55fcb11f4f7463175fe9d57c86b85574 # v1.2.0
+        with:
+          version: v2.3.0
+          cnf_config: ${{ matrix.cnf_config }}
+          kind_config: .github/cnti/kind.yaml
+          kind_load_images: ghcr.io/edgecomllc/eupf:main-test
+          tests: cert
+          log_level: info
+          install_timeout: "300"
+      - name: Memory and map sizes
+        if: always()
+        run: |
+          set +e
+          kubectl get pods -n eupf -o wide
+          pod=$(kubectl get pod -n eupf -l app.kubernetes.io/name=eupf -o jsonpath='{.items[0].metadata.name}')
+          kubectl exec -n eupf "$pod" -- sh -c 'echo "memory.current=$(cat /sys/fs/cgroup/memory.current)"; echo "memory.peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)"; echo "memory.max=$(cat /sys/fs/cgroup/memory.max)"; grep -E "^(VmRSS|VmHWM)" /proc/1/status'
+          kubectl logs -n eupf "$pod" --tail=60 | grep -E "Startup config|Apply eUPF|map|FTL|ERR" | cut -c1-400
+          kubectl get events -n eupf --sort-by=.lastTimestamp | tail -8
