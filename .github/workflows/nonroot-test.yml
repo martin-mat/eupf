@@ -10,6 +10,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: The runner's BPF filesystem (bound into the kind nodes)
+        run: mount | grep -E ' /sys/fs/bpf ' || { echo '::error::no bpffs on the runner'; exit 1; }
       - name: Build the image with file capabilities
         run: |
           docker build -t ghcr.io/edgecomllc/eupf:nonroot-test .
