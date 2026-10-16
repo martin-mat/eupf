@@ -233,8 +233,15 @@ podSecurityContext:
 # before 5.8), fall back to a privileged container:
 #   privileged: true
 securityContext:
+  # The image carries these as file capabilities on the eupf binary, so the
+  # container runs as a non-root user; DAC_OVERRIDE lets it create the map pin
+  # directory under /sys/fs/bpf, which root owns. allowPrivilegeEscalation must
+  # stay unset (or true) for file capabilities to apply.
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
   capabilities:
-    add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON]
+    add: [NET_ADMIN, SYS_ADMIN, SYS_RESOURCE, BPF, PERFMON, DAC_OVERRIDE]
 
 extraContainerPorts:
   - name: metrics

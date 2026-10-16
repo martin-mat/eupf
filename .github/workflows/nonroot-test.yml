@@ -1,0 +1,34 @@
+name: CNTi non-root test
+on:
+  push:
+    branches: [nonroot-test]
+permissions:
+  contents: read
+jobs:
+  cert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image with file capabilities
+        run: |
+          docker build -t ghcr.io/edgecomllc/eupf:nonroot-test .
+          docker run --rm --entrypoint sh ghcr.io/edgecomllc/eupf:nonroot-test -c 'apk add --no-cache libcap >/dev/null && getcap /app/bin/eupf'
+      - uses: lfn-cnti/testsuite-action@70536fda55fcb11f4f7463175fe9d57c86b85574 # v1.2.0
+        with:
+          version: v2.3.0
+          cnf_config: .github/cnti/cnti-testsuite.yaml
+          kind_config: .github/cnti/kind.yaml
+          kind_load_images: ghcr.io/edgecomllc/eupf:nonroot-test
+          tests: cert
+          log_level: info
+      - name: Diagnostics
+        if: always()
+        run: |
+          set +e
+          kubectl get pods -n eupf -o wide
+          pod=$(kubectl get pod -n eupf -l app.kubernetes.io/name=eupf -o jsonpath='{.items[0].metadata.name}')
+          kubectl get pod -n eupf "$pod" -o jsonpath='{.spec.containers[0].securityContext}'; echo
+          kubectl exec -n eupf "$pod" -- sh -c 'id; grep -E "^(Uid|Gid|Cap(Prm|Eff|Bnd)|NoNewPrivs)" /proc/1/status; ls -ld /sys/fs/bpf/upf_pipeline'
+          kubectl logs -n eupf "$pod" --all-containers --tail=40
+          kubectl get events -n eupf --sort-by=.lastTimestamp | tail -20
