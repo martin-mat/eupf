@@ -96,6 +96,7 @@ jobs:
     # ACTIONS_RUNTIME_TOKEN, docker load and trivy are local operations.
     permissions: {}
     steps:
+      - uses: actions/checkout@v4  # fork only: an ephemeral runner has no workspace from build-image
       - name: Download image artifact
         uses: actions/download-artifact@v4
         with:
