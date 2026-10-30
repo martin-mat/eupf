@@ -1,0 +1,8 @@
+# Fork test only: expected.yaml without zombie_handled, so that test is a new
+# failure and the only one sent to the AI analysis.
+- test: hostpath_mounts
+  status: failed
+  reason: /sys/fs/bpf from the node is required by the non-root design (#674)
+- test: specialized_init_system
+  status: failed
+  reason: eupf is PID 1; no init in the image yet

@@ -1,0 +1,86 @@
+# Fork test, not for upstream: the CNTi Test Suite's AI analysis of failed
+# tests (lfn-cnti/testsuite-action#28) on eUPF, with a suite built from
+# lfn-cnti/testsuite#2870 (explain --no-logs, not released yet) and a small
+# model in Ollama on the runner, so no key and no paid model.
+name: CNTi AI analysis (fork test)
+
+on:
+  push:
+    branches: [cnti-ai-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Two runs of the same job: with eUPF's real expected results, every failure
+  # is known and no model is asked; without zombie_handled in the list, that
+  # failure is new, and the only one analyzed.
+  essential-with-analysis:
+    name: essential (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: all failures expected
+            expected: .github/cnti/expected.yaml
+          - name: zombie_handled new
+            expected: .github/cnti/expected-without-zombie.yaml
+    env:
+      MODEL: qwen2.5:3b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Fetch the suite with explain --no-logs
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lfn-cnti/testsuite
+          ref: feat/explain-diagnostics
+          path: testsuite-src
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The release build's command, without --release (faster); the action
+      # installs it through binary_url as it would a release tarball.
+      - name: Build the suite
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/testsuite-src:/workspace" -w /workspace crystallang/crystal:1.19.1-alpine-build sh -c "\
+            git config --global --add safe.directory /workspace && \
+            shards install && \
+            crystal build src/cnti-testsuite.cr --static --link-flags '-lxml2 -llzma'"
+          sudo tar -C testsuite-src -czf "$RUNNER_TEMP/cnti-testsuite-explain-diagnostics.tar.gz" cnti-testsuite
+
+      # The facts of three failed tests are several thousand tokens: the
+      # context is raised from Ollama's default, which drops what doesn't fit.
+      - name: Start Ollama with a local model
+        run: |
+          set -euo pipefail
+          docker run -d --name ollama -e OLLAMA_CONTEXT_LENGTH=16384 -p 127.0.0.1:11434:11434 \
+            ollama/ollama:0.40.12@sha256:20d1bbfbabe1c97ba4b16301f08a20d8484bcf77047742a3cb71c613d8e12d0b
+          for _ in $(seq 60); do curl -sf http://127.0.0.1:11434/api/version && break || sleep 2; done
+          docker exec ollama ollama pull "$MODEL"
+
+      # The essential tests, as the badge job runs them: eUPF passes (16 of 19)
+      # and its three failures are analyzed all the same.
+      - uses: lfn-cnti/testsuite-action@ai-analysis
+        with:
+          binary_url: file://${{ runner.temp }}/cnti-testsuite-explain-diagnostics.tar.gz
+          cnf_config: .github/cnti/cnti-testsuite.yaml
+          kind_config: .github/cnti/kind.yaml
+          tests: cert
+          fail_on_failure: false
+          analyze: true
+          expected_results: ${{ matrix.expected }}
+          on_regression: warn
+          analyze_provider: openai-compatible
+          analyze_endpoint: http://127.0.0.1:11434/v1
+          analyze_model: ${{ env.MODEL }}
+
+      - name: Ollama's log
+        if: always()
+        run: docker logs ollama 2>&1 | tail -30

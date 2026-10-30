@@ -1,0 +1,12 @@
+# The CNTi essential results eUPF knows and accepts, with why. A test not
+# listed here is expected to pass; a run that differs is reported, and only
+# the tests that differ are sent to the AI analysis.
+- test: hostpath_mounts
+  status: failed
+  reason: /sys/fs/bpf from the node is required by the non-root design (#674)
+- test: specialized_init_system
+  status: failed
+  reason: eupf is PID 1; no init in the image yet
+- test: zombie_handled
+  status: failed
+  reason: eupf is PID 1, which doesn't reap orphans; no init in the image yet
