@@ -76,6 +76,7 @@ jobs:
           fail_on_failure: false
           analyze: true
           expected_results: ${{ matrix.expected }}
+          artifact_name: cnti-testsuite-results-${{ strategy.job-index }}
           on_regression: warn
           analyze_provider: openai-compatible
           analyze_endpoint: http://127.0.0.1:11434/v1
