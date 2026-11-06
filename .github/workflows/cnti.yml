@@ -64,9 +64,31 @@ jobs:
         with:
           persist-credentials: false
 
+      # Trial of the suite's v2.4.1 candidate (lfn-cnti/testsuite main at
+      # 84468ab4): built here as its release workflow builds it, and served to
+      # the action from this runner, so no binary is published.
+      - name: Check out the suite's v2.4.1 candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: lfn-cnti/testsuite
+          ref: 84468ab4c6b6ebd410bc534c72101e81fadd07c8
+          path: suite-src
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Build it (static, as the release workflow does)
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/suite-src:/workspace" -w /workspace crystallang/crystal:1.19.1-alpine-build sh -c "\
+            git config --global --add safe.directory /workspace && shards install && \
+            crystal build src/cnti-testsuite.cr --release --static --link-flags '-lxml2 -llzma'"
+          mkdir -p "$RUNNER_TEMP/rc"
+          tar -czf "$RUNNER_TEMP/rc/cnti-testsuite-v2.4.1-rc1.tar.gz" -C suite-src ./cnti-testsuite
+          (cd "$RUNNER_TEMP/rc" && nohup python3 -m http.server 8765 --bind 127.0.0.1 > "$RUNNER_TEMP/http.log" 2>&1 &)
+          for _ in $(seq 20); do curl -sf -o /dev/null http://127.0.0.1:8765/cnti-testsuite-v2.4.1-rc1.tar.gz && break || sleep 0.5; done
+
       - uses: lfn-cnti/testsuite-action@caec9b0ba82b0f82e11e08eaed2cf5c1aa00dce4 # v1.3.0
         with:
-          version: v2.4.0
+          binary_url: http://127.0.0.1:8765/cnti-testsuite-v2.4.1-rc1.tar.gz
           cnf_config: .github/cnti/cnti-testsuite.yaml
           kind_config: .github/cnti/kind.yaml
           tests: cert
